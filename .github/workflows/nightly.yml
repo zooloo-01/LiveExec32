@@ -13,6 +13,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  virtual-display:
+    name: UIKit virtual display regression
+    runs-on: macos-26
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+    - name: Run UIKit conversion and hit-testing checks
+      run: |
+        device=$(xcrun simctl list devices available -j | python3 -c '
+        import json, sys
+        devices = json.load(sys.stdin)["devices"]
+        print(next(d["udid"] for group in devices.values() for d in group
+                   if d["isAvailable"] and d["name"].startswith("iPhone")))')
+        xcrun simctl boot "$device"
+        xcrun simctl bootstatus "$device" -b
+        sh test/uikit_virtual_display.sh --device "$device"
+
   build:
     runs-on: macos-26
     timeout-minutes: 90
@@ -77,18 +98,6 @@ jobs:
 
     - name: Check virtual display geometry and policy
       run: gmake -C test check-display-geometry check-display-policy
-
-    - name: Test UIKit virtual display in Simulator
-      timeout-minutes: 5
-      run: |
-        device=$(xcrun simctl list devices available -j | python3 -c '
-        import json, sys
-        devices = json.load(sys.stdin)["devices"]
-        print(next(d["udid"] for group in devices.values() for d in group
-                   if d["isAvailable"] and d["name"].startswith("iPhone")))')
-        xcrun simctl boot "$device"
-        xcrun simctl bootstatus "$device" -b
-        sh test/uikit_virtual_display.sh --device "$device"
 
     - name: Generate guest shims
       run: gmake -C GuestMakefile generate-shims

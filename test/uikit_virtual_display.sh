@@ -17,7 +17,8 @@ identifier="org.liveexec32.displaytest.$(basename "$work" | tr -cd '[:alnum:]')"
 installed=0
 cleanup() {
     if [ "$installed" -eq 1 ]; then
-        xcrun simctl uninstall "$device" "$identifier" >/dev/null 2>&1 || :
+        perl -e 'alarm 15; exec @ARGV; die "exec: $!\n"' \
+            xcrun simctl uninstall "$device" "$identifier" >/dev/null 2>&1 || :
     fi
     echo "Virtual display test artifacts: $work"
 }
