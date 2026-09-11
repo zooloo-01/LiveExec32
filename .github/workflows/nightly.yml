@@ -2,7 +2,7 @@ name: Build LiveExec32
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, codex/legacy-virtual-display]
   pull_request:
     branches: [main]
   workflow_dispatch:
