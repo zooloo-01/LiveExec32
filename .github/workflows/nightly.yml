@@ -75,6 +75,12 @@ jobs:
           "$tools_dir/pzb"
         echo "$tools_dir" >> "$GITHUB_PATH"
 
+    - name: Check virtual display geometry and policy
+      run: gmake -C test check-display-geometry check-display-policy
+
+    - name: Compile UIKit virtual display regression
+      run: sh test/uikit_virtual_display.sh --build-only
+
     - name: Generate guest shims
       run: gmake -C GuestMakefile generate-shims
 

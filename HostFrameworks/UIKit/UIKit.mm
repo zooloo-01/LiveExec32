@@ -6,6 +6,7 @@
 #include "crash_exception.h"
 #include "LiveExec32Shared.h"
 #include "LC32LegacyCanvas.h"
+#include "LC32DisplayGeometry.h"
 #include "../CoreGraphics/LC32CoreGraphicsHost.h"
 
 #include <atomic>
@@ -27,7 +28,7 @@ typedef NS_ENUM(NSUInteger, LC32LegacyIPadGeometryMode) {
     LC32LegacyIPadGeometryModePreservePhonePortraitCanvas,
     /* Some 568-point phone applications advertise tall launch art but retain
      * a 480x320 game view. Keep that already-landscape drawable centered at
-     * 1x inside the modern scene. */
+     * an aspect-fit scale inside the modern scene. */
     LC32LegacyIPadGeometryModePreservePhoneLandscapeCanvas,
 };
 
@@ -737,6 +738,7 @@ struct LC32LegacyCanvasPolicy {
     bool usesFixedLandscapeIPadCanvas;
     bool usesFixedLandscapePhoneCanvas;
     bool mayRetainLegacyLandscapePhoneCanvas;
+    unsigned displayScale;
 };
 
 const LC32LegacyCanvasPolicy& LC32GuestLegacyCanvasPolicy(void) {
@@ -745,6 +747,7 @@ const LC32LegacyCanvasPolicy& LC32GuestLegacyCanvasPolicy(void) {
         false,
         false,
         false,
+        2,
     };
     const char *guestExecutable = getenv("LC32_GUEST_EXECUTABLE");
     /* UIKit can create internal windows while the shim dylib is loading.
@@ -767,6 +770,7 @@ const LC32LegacyCanvasPolicy& LC32GuestLegacyCanvasPolicy(void) {
         result.mayRetainLegacyLandscapePhoneCanvas =
             LC32BundleMayRetainLegacyLandscapePhoneCanvas(
                 bundle, LC32GetGuestExecutableSDKVersion());
+        result.displayScale = LC32BundleLegacyDisplayScale(bundle);
     });
     return result;
 }
@@ -1153,7 +1157,6 @@ bool LC32LegacyWindowHasAncestorCompositor(
 
 bool LC32WindowUsesRootlessPhoneCanvas(UIWindow *window) {
     return window && window.guest_selfOrNull &&
-        LC32GetGuestExecutableSDKVersion() < 0x80000 &&
         LC32GuestUsesFixedLandscapePhoneCanvas() &&
         [LC32NativeWindowRootViewController(window)
             isKindOfClass:LC32LegacyWindowRootController.class];
@@ -1347,8 +1350,11 @@ void LC32FitRootlessWindowPlacement(UIWindow *window, CALayer *layer) {
      * drawing enlarged sublayers beyond the original window hit region. */
     const CGRect bounds = layer.bounds;
     const CGPoint anchor = layer.anchorPoint;
+    const bool landscape = bounds.size.width > bounds.size.height;
+    const CGRect logicalBounds = landscape ? CGRectMake(0, 0, 480, 320)
+                                           : CGRectMake(0, 0, 320, 480);
     if(LC32ObjectUsesGuestClass(window) || !window.windowScene ||
-            !CGRectEqualToRect(bounds, CGRectMake(0, 0, 480, 320)) ||
+            !CGRectEqualToRect(bounds, logicalBounds) ||
             !CGPointEqualToPoint(anchor, CGPointMake(0.5, 0.5))) {
         LC32ReconcileRootlessWindowPlacement(window, layer, true);
         return;
@@ -1363,14 +1369,15 @@ void LC32FitRootlessWindowPlacement(UIWindow *window, CALayer *layer) {
     /* The window can reach landscape before its scene/source space settles.
      * Do not claim placement ownership in that provisional portrait space:
      * UIKit's subsequent ordinary recenter is not an application takeover. */
-    if(!(viewport.size.width > viewport.size.height) ||
+    if((viewport.size.width > viewport.size.height) != landscape ||
             !(viewport.size.height > 0) || !isfinite(viewport.size.width) ||
             !isfinite(viewport.size.height)) return;
     /* Coordinate conversion removes our existing scale. Put the viewport
      * back into the native parent space before fitting, so repeated passes
      * neither compound nor cancel the previous placement. */
-    const CGFloat scale = MIN(viewport.size.width / bounds.size.width,
-                              viewport.size.height / bounds.size.height) *
+    const CGFloat scale = LC32DisplayAspectFitScale(
+        viewport.size.width, viewport.size.height,
+        bounds.size.width, bounds.size.height) *
         current.a;
     const CGPoint targetCenter = {
         center.x + (CGRectGetMidX(viewport) - CGRectGetMidX(bounds)) * current.a,
@@ -1413,7 +1420,7 @@ bool LC32FitLegacyDirectWindowLayers(UIWindow *window) {
     if(rootlessPhoneCanvas) LC32PreserveRootlessRendererAutoresizing(window);
     else LC32RestoreRootlessRendererAutoresizing(window);
     const bool ownsWindowPlacement = LC32ReconcileRootlessWindowPlacement(
-        window, windowLayer, !rootlessPhoneCanvas);
+        window, windowLayer, !rootlessPhoneCanvas && !directRootState.boolValue);
     if(!directRootState.boolValue && !rootlessPhoneCanvas) {
         LC32RestoreLegacyDirectWindowSublayerTransform(
             window, windowLayer, savedTransform);
@@ -1436,6 +1443,9 @@ bool LC32FitLegacyDirectWindowLayers(UIWindow *window) {
     if(!isCoreSimulator && !rootlessPhoneCanvas) {
         LC32RestoreLegacyDirectWindowSublayerTransform(
             window, windowLayer, savedTransform);
+        /* Native UIKit owns the main-nib compositor turn on device, but its
+         * legacy window can still need an aspect-fit presentation scale. */
+        LC32FitRootlessWindowPlacement(window, windowLayer);
         return true;
     }
 
@@ -1479,9 +1489,15 @@ bool LC32FitLegacyDirectWindowLayers(UIWindow *window) {
          !CATransform3DIsIdentity(windowLayer.sublayerTransform));
     if(alreadyHasNativeCompositor ||
             !(windowBounds.size.width > windowBounds.size.height)) {
-        LC32ReconcileRootlessWindowPlacement(window, windowLayer, true);
         LC32RestoreLegacyDirectWindowSublayerTransform(
             window, windowLayer, savedTransform);
+        if(!alreadyHasNativeCompositor && rootlessPhoneCanvas &&
+                UIInterfaceOrientationIsPortrait(
+                    LC32LegacyTargetOrientation(nativeRoot))) {
+            LC32FitRootlessWindowPlacement(window, windowLayer);
+        } else {
+            LC32ReconcileRootlessWindowPlacement(window, windowLayer, true);
+        }
         return true;
     }
 
@@ -1550,9 +1566,9 @@ bool LC32FitLegacyDirectWindowLayers(UIWindow *window) {
 
     constexpr CGSize logicalSize = {320, 480};
     const CGSize turnedSize = {logicalSize.height, logicalSize.width};
-    const CGFloat scale = MIN(
-        windowBounds.size.width / turnedSize.width,
-        windowBounds.size.height / turnedSize.height);
+    const CGFloat scale = LC32DisplayAspectFitScale(
+        windowBounds.size.width, windowBounds.size.height,
+        turnedSize.width, turnedSize.height);
     if(!(scale > 0) || !isfinite(scale)) return true;
 
     CGAffineTransform transform = CGAffineTransformScale(
@@ -2845,14 +2861,13 @@ extern "C" bool LC32UIKitGetViewDuringGuestLoad(
         CGRectMake(0, 0, logicalSize.width, logicalSize.height), rotation);
     const CGFloat transformedWidth = fabs(transformedBounds.size.width);
     const CGFloat transformedHeight = fabs(transformedBounds.size.height);
-    CGFloat scale = transformedWidth > 0 && transformedHeight > 0
-        ? MIN(viewportSize.width / transformedWidth,
-              viewportSize.height / transformedHeight)
-        : 0;
-    if(_geometryMode ==
-            LC32LegacyIPadGeometryModePreservePhoneLandscapeCanvas) {
-        scale = MIN((CGFloat)1, scale);
-    }
+    const CGFloat scale = LC32DisplayAspectFitScale(
+        viewportSize.width, viewportSize.height,
+        transformedWidth, transformedHeight);
+    /* Presentation scale is independent of drawable pixel density. UIKit
+     * applies the inverse canvas transform for hit testing/point conversion;
+     * increasing contentsScale or glViewport here would change the guest's
+     * framebuffer contract instead of enlarging its virtual display. */
     if(scale > 0 && isfinite(scale)) {
         const CGRect desiredContentBounds = CGRectMake(
             canonicalBounds.origin.x, canonicalBounds.origin.y,
@@ -2974,6 +2989,29 @@ extern "C" bool LC32UIKitGetViewDuringGuestLoad(
 }
 
 @end
+
+extern "C" void LC32UIKitPrepareLegacyDrawable(id drawable) {
+    if(!LC32UIKitLegacyCompatibilityEnabled()) return;
+    const auto &policy = LC32GuestLegacyCanvasPolicy();
+    if(!policy.usesFixedLandscapePhoneCanvas) return;
+    if(![drawable isKindOfClass:NSClassFromString(@"CAEAGLLayer")]) return;
+    CALayer *layer = (CALayer *)drawable;
+    /* Only an actual guest drawable may be normalized, including one whose
+     * UIView owns the guest peer. No FBO/texture state or native UI is touched.
+     * Do not walk UIView hierarchies here: allocation can run on a GL thread. */
+    if(!layer.guest_selfOrNull &&
+            ![(id)layer.delegate guest_selfOrNull]) return;
+    const CGSize size = layer.bounds.size;
+    if(fabs(MIN(size.width, size.height) - 320) >= 0.5 ||
+            fabs(MAX(size.width, size.height) - 480) >= 0.5) return;
+    const CGFloat density = layer.contentsScale;
+    if(isfinite(density) && density > policy.displayScale) {
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        layer.contentsScale = policy.displayScale;
+        [CATransaction commit];
+    }
+}
 
 extern "C" void LC32UIKitPrepareGuestClass(Class cls) {
     if(!cls || !LC32ClassIsUIViewController(cls)) return;

@@ -1,5 +1,6 @@
 LC32_HOST_TEST_GOALS := check-guest-bootstrap check-memory-hash \
-  check-coremedia-time-values-host check-debug-logging
+  check-coremedia-time-values-host check-debug-logging \
+  check-display-geometry check-display-policy
 LC32_HOST_ONLY_BUILD := $(if $(strip $(MAKECMDGOALS)),\
   $(if $(strip $(filter-out $(LC32_HOST_TEST_GOALS),$(MAKECMDGOALS))),,1),)
 
@@ -8,6 +9,21 @@ HOST_CC ?= xcrun --sdk macosx clang
 HOST_CXXFLAGS ?= -std=c++17 -Wall -Wextra -Werror -pedantic
 HOST_CFLAGS ?= -Wall -Wextra -Werror -pedantic
 HOST_TEST_OUTPUT_DIR ?= $(CURDIR)/.theos/host-tests
+
+.PHONY: check-display-geometry check-display-policy
+check-display-geometry: $(HOST_TEST_OUTPUT_DIR)/display-geometry
+	"$<"
+
+$(HOST_TEST_OUTPUT_DIR)/display-geometry: display_geometry.c ../include/LC32DisplayGeometry.h
+	@mkdir -p "$(HOST_TEST_OUTPUT_DIR)"
+	$(HOST_CC) $(HOST_CFLAGS) $< -o "$@"
+
+check-display-policy: $(HOST_TEST_OUTPUT_DIR)/display-policy
+	"$<"
+
+$(HOST_TEST_OUTPUT_DIR)/display-policy: legacy_display_policy.m ../include/LC32LegacyCanvas.h
+	@mkdir -p "$(HOST_TEST_OUTPUT_DIR)"
+	$(HOST_CC) -fobjc-arc -Wall -Wextra -Werror -framework Foundation $< -o "$@"
 GUEST_BOOTSTRAP_HOST_TEST := $(HOST_TEST_OUTPUT_DIR)/guest-bootstrap-host
 MEMORY_HASH_HOST_TEST := $(HOST_TEST_OUTPUT_DIR)/memory-hash-host
 COREMEDIA_TIME_VALUES_HOST_TEST := \

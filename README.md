@@ -149,6 +149,27 @@ be enabled explicitly, for example with
 `LC32_GUEST_ENV_DYLD_PRINT_SEGMENTS=1`.
 
 ## Design
+### Legacy virtual display
+
+Fixed 320x480/480x320 guest canvases now scale up as well as down to fit the
+host viewport, with centered letterboxing or pillarboxing. Presentation uses
+the native UIKit hierarchy; the GL viewport and offscreen framebuffer sizes
+remain guest-owned. See [VirtualDisplay.md](VirtualDisplay.md) for the bridge
+path, configuration, validation commands, and remaining device checks.
+
+Set these keys in the **guest game's** `Info.plist` before launching it:
+
+| Key | Values | Behavior |
+| --- | --- | --- |
+| `LC32DisplayMode` | `auto` (default), `legacy`, `native` | Keep conservative detection, force a 320x480 phone canvas, or bypass virtual canvas selection. |
+| `LC32LegacyDisplayScale` | integer `1` or `2` (default) | Maximum legacy drawable density. Use `1` for engines with a hardcoded 480x320 pixel viewport; `2` permits 960x640 Retina storage. |
+
+Restart the guest after changing these settings. `native` is the explicit
+choice for resize-aware games that query renderbuffer dimensions. A legacy
+game that requests a 1x drawable keeps it at 1x even when the maximum is 2.
+The existing `LC32_DISABLE_UIKIT_COMPATIBILITY` switch and native pre-iOS-8
+host policy still take precedence over virtual display settings.
+
 - LiveExec32 has most of the codebase and references from [unidbg](https://github.com/zhkl0228/unidbg), so it also uses Dynarmic as the dynamic translator of ARMv7 code to ARM64.
 - The entry point starts from dyld, so it has all of dyld APIs isolated from that of host.
 - In `CallSVC`, it goes through a long list of guest functions that copy memory regions from input and to output using a page table. Perhaps page bound checks can be added to allow fastpath memory access.

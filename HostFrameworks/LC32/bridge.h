@@ -113,6 +113,8 @@ BOOL host_hook_getClass(const char *name, Class *outClass);
 // Shared host/guest policy: native pre-iOS-8 processes use UIKit's compositor.
 // LC32_DISABLE_UIKIT_COMPATIBILITY=1 also disables adapters on modern hosts.
 u32 LC32UIKitLegacyCompatibilityEnabled(void);
+// Normalize only guest legacy CAEAGLLayer density before allocating storage.
+void LC32UIKitPrepareLegacyDrawable(id drawable);
 // Lets framework bridges add native compatibility entry points after all
 // guest methods have been mirrored but before the class is registered.
 void LC32UIKitPrepareGuestClass(Class cls);

@@ -2268,6 +2268,7 @@ size_t VertexAttribElementCount(GLenum pname) {
             normalized[normalizedKey] = normalizedValue;
         }
         drawableLayer.drawableProperties = normalized;
+        LC32UIKitPrepareLegacyDrawable(drawableLayer);
     }
 
     BOOL result = [self lc32_renderbufferStorage:target

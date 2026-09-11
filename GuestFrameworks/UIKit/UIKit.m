@@ -710,6 +710,7 @@ compatibleWithTraitCollection:nil];
 
 - (CGRect)bounds {
     CGRect bounds = LC32HostScreenRect(self, _cmd);
+    if(self.host_self != UIScreen.mainScreen.host_self) return bounds;
     /* Before iOS 8, UIScreen coordinates remained portrait-oriented.
      * Legacy landscape apps transpose this size themselves, so undo modern
      * UIKit's orientation-aware ordering while retaining point units. */
@@ -735,6 +736,7 @@ compatibleWithTraitCollection:nil];
 
 - (CGRect)applicationFrame {
     CGRect frame = LC32HostScreenRect(self, _cmd);
+    if(self.host_self != UIScreen.mainScreen.host_self) return frame;
     if(LC32ScreenNeedsLegacyIPadCanvas(frame)) {
         /* iOS 3.x iPad applications laid out below a 20-point status bar.
          * Preserve it when visible; full-screen apps use -bounds instead. */
@@ -750,8 +752,9 @@ compatibleWithTraitCollection:nil];
 }
 
 - (CGFloat)scale {
+    const BOOL isMainScreen = self.host_self == UIScreen.mainScreen.host_self;
     const CGRect bounds = LC32HostScreenRect(self, @selector(bounds));
-    if(LC32ScreenNeedsLegacyIPadCanvas(bounds)) {
+    if(isMainScreen && LC32ScreenNeedsLegacyIPadCanvas(bounds)) {
         return 1.0f;
     }
 
@@ -760,8 +763,9 @@ compatibleWithTraitCollection:nil];
         &hostSelector, _cmd, NO);
     CGFloat scale = (CGFloat)LC32HostFloatingResult(LC32InvokeHostSelector(
         self.host_self, selector, (uint64_t)0));
-    if(LC32RequiresFixedLandscapePhoneCanvas() && scale > 2.0f) {
-        scale = 2.0f;
+    if(isMainScreen && LC32RequiresFixedLandscapePhoneCanvas()) {
+        scale = MIN(scale, (CGFloat)LC32BundleLegacyDisplayScale(
+            NSBundle.mainBundle));
     }
     return scale;
 }

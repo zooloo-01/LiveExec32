@@ -5,6 +5,20 @@
 
 #include <stdint.h>
 
+/* Per-guest launch settings, read from the same bundle in both runtimes.
+ * Never infer legacy mode from glViewport: that also describes offscreen
+ * passes. Missing/unknown values retain the conservative metadata policy. */
+static inline BOOL LC32BundleDisplayModeIs(NSBundle *bundle, NSString *mode) {
+    id value = [[bundle infoDictionary] objectForKey:@"LC32DisplayMode"];
+    return [value isKindOfClass:NSString.class] && [value isEqual:mode];
+}
+
+static inline unsigned LC32BundleLegacyDisplayScale(NSBundle *bundle) {
+    id value = [[bundle infoDictionary] objectForKey:@"LC32LegacyDisplayScale"];
+    return [value isKindOfClass:NSNumber.class] && [value doubleValue] == 1.0
+        ? 1 : 2;
+}
+
 typedef enum {
     LC32LegacyIPadCanvasNone,
     LC32LegacyIPadCanvasDeclared,
@@ -157,6 +171,9 @@ static inline BOOL LC32BundleContainsTallPhoneLaunchArt(
  * universal applications retain the phone path. */
 static inline LC32LegacyIPadCanvasKind LC32BundleLegacyIPadCanvasKind(
         NSBundle *bundle, uint32_t sdkVersion) {
+    if(LC32BundleDisplayModeIs(bundle, @"native") ||
+            LC32BundleDisplayModeIs(bundle, @"legacy"))
+        return LC32LegacyIPadCanvasNone;
     NSDictionary *info = [bundle infoDictionary];
     const LC32SupportedDeviceFamilies families =
         LC32BundleSupportedDeviceFamilies(bundle);
@@ -272,6 +289,10 @@ static inline BOOL LC32BundleUsesFixedLandscapeIPadCanvas(
  * "n/a", whereas a missing host getter is filtered by the guest caller. */
 static inline BOOL LC32BundleUsesFixedLandscapePhoneCanvas(
         NSBundle *bundle, uint32_t sdkVersion) {
+    if(LC32BundleDisplayModeIs(bundle, @"native")) return NO;
+    /* Explicit legacy mode also permits portrait and universal titles.
+     * The host's portrait-canvas wrapper supplies any compositor rotation. */
+    if(LC32BundleDisplayModeIs(bundle, @"legacy")) return YES;
     const LC32SupportedDeviceFamilies families =
         LC32BundleSupportedDeviceFamilies(bundle);
     if(!families.supportsPhone || families.supportsPad ||
@@ -291,6 +312,8 @@ static inline BOOL LC32BundleUsesFixedLandscapePhoneCanvas(
  * before checking the loaded controller's exact native bounds. */
 static inline BOOL LC32BundleMayRetainLegacyLandscapePhoneCanvas(
         NSBundle *bundle, uint32_t sdkVersion) {
+    if(LC32BundleDisplayModeIs(bundle, @"native") ||
+            LC32BundleDisplayModeIs(bundle, @"legacy")) return NO;
     const LC32SupportedDeviceFamilies families =
         LC32BundleSupportedDeviceFamilies(bundle);
     if(!families.supportsPhone || families.supportsPad ||
