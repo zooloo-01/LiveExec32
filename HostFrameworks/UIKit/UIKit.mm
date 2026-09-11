@@ -3002,7 +3002,8 @@ extern "C" void LC32UIKitPrepareLegacyDrawable(id drawable) {
     if(!layer.guest_selfOrNull &&
             ![(id)layer.delegate guest_selfOrNull]) return;
     const CGSize size = layer.bounds.size;
-    if(fabs(MIN(size.width, size.height) - 320) >= 0.5 ||
+    if(!isfinite(size.width) || !isfinite(size.height) ||
+            fabs(MIN(size.width, size.height) - 320) >= 0.5 ||
             fabs(MAX(size.width, size.height) - 480) >= 0.5) return;
     const CGFloat density = layer.contentsScale;
     if(isfinite(density) && density > policy.displayScale) {

@@ -107,7 +107,7 @@ landscape directions, upside-down portrait, retained logical drawable bounds,
 and 1x/2x density. It uses the production aspect-fit helper and native wrapper
 placement pattern. It is a contract test, not a full emulator integration test.
 `--build-only` compiles without installing. CI runs the portable and Foundation
-tests and compiles this Simulator fixture before building the project.
+tests and runs this fixture on a booted iPhone Simulator before building the project.
 
 Device acceptance remains necessary: run Spy Mouse/Veggie Ninja with the
 appropriate density, tap controls at all corners, drag across the canvas,

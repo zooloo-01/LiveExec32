@@ -39,7 +39,7 @@ arch=$(uname -m)
 xcrun --sdk iphonesimulator clang -target "$arch-apple-ios15.0-simulator" \
     -isysroot "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
     -fobjc-arc -Wall -Wextra -Werror -Wno-deprecated-declarations \
-    -framework UIKit -framework QuartzCore -framework Foundation \
+    -framework UIKit -framework QuartzCore -framework Foundation -framework CoreGraphics \
     "$repo/test/uikit_virtual_display.m" -o "$app/DisplayTest"
 codesign --force --sign - "$app"
 if [ "$build_only" -eq 1 ]; then exit 0; fi
