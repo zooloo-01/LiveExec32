@@ -158,17 +158,28 @@ void layoutDrawables(void) {
 }
 
 extern "C" void LC32UIKitScheduleLegacyDisplayLayout(void) {
-    if(!hasDrawables.load(std::memory_order_acquire) ||
-            layoutPending.exchange(true, std::memory_order_acq_rel)) return;
+    if(!hasDrawables.load(std::memory_order_acquire)) return;
+    if(NSThread.isMainThread) {
+        // Some old engines keep the main thread in their own render loop.
+        // A queued block alone would never run there. This changes only native
+        // layer presentation and never calls guest layout/rendering methods.
+        static thread_local bool fitting;
+        if(fitting) return;
+        fitting = true;
+        @try { layoutDrawables(); }
+        @finally { fitting = false; }
+        return;
+    }
+    if(layoutPending.exchange(true, std::memory_order_acq_rel)) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         layoutPending.store(false, std::memory_order_release);
-        layoutDrawables();
+        LC32UIKitScheduleLegacyDisplayLayout();
     });
 }
 
 extern "C" void LC32UIKitDidAllocateLegacyDrawable(id drawable) {
     if(![drawable isKindOfClass:CAEAGLLayer.class]) return;
-    dispatch_async(dispatch_get_main_queue(), ^{
+    dispatch_block_t registerDrawable = ^{
         if(!enabled()) return;
         if(!drawables) {
             const NSPointerFunctionsOptions options = NSPointerFunctionsWeakMemory |
@@ -179,5 +190,7 @@ extern "C" void LC32UIKitDidAllocateLegacyDrawable(id drawable) {
         [drawables addObject:drawable];
         hasDrawables.store(true, std::memory_order_release);
         LC32UIKitScheduleLegacyDisplayLayout();
-    });
+    };
+    if(NSThread.isMainThread) registerDrawable();
+    else dispatch_async(dispatch_get_main_queue(), registerDrawable);
 }
