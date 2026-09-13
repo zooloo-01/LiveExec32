@@ -6,6 +6,7 @@
 
 static unsigned failures;
 extern int LC32RunLegacyDisplayTests(void);
+extern void LC32RunDisplayBridgeTests(void (^completion)(int));
 static void check(BOOL ok, const char *name) {
     if(!ok) { fprintf(stderr, "virtual display: FAIL %s\n", name); ++failures; }
 }
@@ -76,7 +77,9 @@ static void checkCanvas(CGSize viewport, CGSize logical, CGFloat angle) {
         checkCanvas(CGSizeMake(240, 160), CGSizeMake(480, 320), 0);
         printf("virtual display UIKit: %s\n", failures ? "FAIL" : "PASS");
         fflush(stdout);
-        exit(failures ? 1 : 0);
+        LC32RunDisplayBridgeTests(^(int failed) {
+            exit(failures || failed ? 1 : 0);
+        });
     });
     return YES;
 }

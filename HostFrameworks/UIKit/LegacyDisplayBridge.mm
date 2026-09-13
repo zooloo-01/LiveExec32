@@ -1,7 +1,8 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/CAEAGLLayer.h>
 #import <objc/runtime.h>
-#include "bridge.h"
+#include "LC32LegacyDisplayBridge.h"
+#import <objc/message.h>
 #include "LC32LegacyCanvas.h"
 #include "LegacyDisplay.h"
 #include <atomic>
@@ -11,6 +12,12 @@
 #include <cstring>
 
 extern "C" uint32_t LC32GetGuestExecutableSDKVersion(void);
+extern "C" uint32_t LC32UIKitLegacyCompatibilityEnabled(void);
+// Supplied by the Objective-C peer bridge; no emulator headers are needed
+// to exercise this native presentation path in a Simulator regression.
+@interface NSObject (LC32LegacyDisplayPeer)
+- (uint32_t)guest_selfOrNull;
+@end
 
 namespace {
 // UIKit geometry is inspected only on the native main thread. These atomics
@@ -40,6 +47,9 @@ bool enabled(void) {
             [[NSString stringWithUTF8String:executable] stringByDeletingLastPathComponent]];
         result = LC32BundleMayUseLegacyPhoneDrawable(
             bundle, LC32GetGuestExecutableSDKVersion());
+        fprintf(stderr, "LC32 display: presented-drawable policy=%s guestSDK=0x%x "
+            "rotationAdapter=%u\n", result ? "enabled" : "native",
+            LC32GetGuestExecutableSDKVersion(), LC32UIKitLegacyCompatibilityEnabled());
     });
     // Scaling measured native geometry is separate from SDK-dependent legacy
     // rotation. Low-SDK UIKit may supply its own turn, but still leave a small
@@ -105,7 +115,8 @@ void layoutDrawables(void) {
         }
         [layers addObject:layer];
     }
-    NSHashTable<CALayer *> *activeParents = [NSHashTable weakObjectsHashTable];
+    NSHashTable<CALayer *> *activeParents = [NSHashTable hashTableWithOptions:
+        NSPointerFunctionsWeakMemory | NSPointerFunctionsObjectPointerPersonality];
     for(UIWindow *window in byWindow.keyEnumerator) {
         NSArray<CALayer *> *layers = [byWindow objectForKey:window];
         CALayer *parent = nativeGetter<CALayer *>(window, UIView.class, @selector(layer));
@@ -160,8 +171,10 @@ extern "C" void LC32UIKitDidAllocateLegacyDrawable(id drawable) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if(!enabled()) return;
         if(!drawables) {
-            drawables = [[NSHashTable weakObjectsHashTable] retain];
-            fittedParents = [[NSHashTable weakObjectsHashTable] retain];
+            const NSPointerFunctionsOptions options = NSPointerFunctionsWeakMemory |
+                NSPointerFunctionsObjectPointerPersonality;
+            drawables = [[NSHashTable alloc] initWithOptions:options capacity:0];
+            fittedParents = [[NSHashTable alloc] initWithOptions:options capacity:0];
         }
         [drawables addObject:drawable];
         hasDrawables.store(true, std::memory_order_release);

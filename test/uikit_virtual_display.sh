@@ -34,6 +34,8 @@ cat > "$app/Info.plist" <<EOF
 <key>CFBundleName</key><string>DisplayTest</string>
 <key>MinimumOSVersion</key><string>15.0</string>
 <key>UILaunchScreen</key><dict/>
+<key>UIDeviceFamily</key><array><integer>1</integer></array>
+<key>UIStatusBarHidden</key><true/>
 </dict></plist>
 EOF
 arch=$(uname -m)
@@ -42,7 +44,10 @@ xcrun --sdk iphonesimulator clang -target "$arch-apple-ios15.0-simulator" \
     -fobjc-arc -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -framework UIKit -framework QuartzCore -framework Foundation -framework CoreGraphics \
     "$repo/test/uikit_virtual_display.m" "$repo/test/uikit_legacy_display.mm" \
-    "$repo/HostFrameworks/UIKit/LegacyDisplay.mm" -lc++ -o "$app/DisplayTest"
+    "$repo/test/uikit_display_bridge.mm" \
+    "$repo/HostFrameworks/UIKit/LegacyDisplay.mm" \
+    "$repo/HostFrameworks/UIKit/LegacyDisplayBridge.mm" \
+    -I"$repo/include" -lc++ -o "$app/DisplayTest"
 codesign --force --sign - "$app"
 if [ "$build_only" -eq 1 ]; then exit 0; fi
 xcrun simctl install "$device" "$app"
@@ -54,4 +59,5 @@ perl -e 'alarm 45; exec @ARGV; die "exec: $!\n"' \
 cat "$work/result.log"
 grep -q 'virtual display UIKit: PASS' "$work/result.log"
 grep -q 'legacy display production UIKit: PASS' "$work/result.log"
+grep -q 'legacy display production bridge: PASS' "$work/result.log"
 ! grep -q 'FAIL' "$work/result.log"

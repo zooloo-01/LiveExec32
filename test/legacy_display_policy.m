@@ -46,6 +46,19 @@ int main(void) {
             assert(LC32BundleLegacyDisplayScale(bundle) ==
                 ([value isEqual:@1] ? 1u : 2u));
         }
+        [info removeObjectForKey:@"LC32DisplayMode"];
+        info[@"UIStatusBarHidden"] = @YES;
+        bundle.testInfo = info;
+        bundle.art = [NSSet set];
+        assert(LC32BundleMayUseLegacyPhoneDrawable(bundle, 0x40000));
+        assert(!LC32BundleMayUseLegacyPhoneDrawable(bundle, 0x80000));
+        info[@"LC32DisplayMode"] = @"native";
+        bundle.testInfo = info;
+        assert(!LC32BundleMayUseLegacyPhoneDrawable(bundle, 0x40000));
+        [info removeObjectForKey:@"LC32DisplayMode"];
+        info[@"UIStatusBarHidden"] = @NO;
+        bundle.testInfo = info;
+        assert(!LC32BundleMayUseLegacyPhoneDrawable(bundle, 0x40000));
         puts("legacy display policy: PASS");
     }
     return 0;

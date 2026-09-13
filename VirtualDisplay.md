@@ -1,5 +1,39 @@
 # Legacy virtual display
 
+## September 13 revision: presentation inside a modern window
+
+The first IPA did not fix Spy Mouse on the reported LiveContainer/iPhone 16
+Pro setup. Its screenshot shows a 320x480-point image at the origin of a
+402x874-point display. The prior window-placement path only accepted windows
+whose own bounds were 320x480/480x320; it returned without fitting a small
+renderer inside a native-size window. Its tests never exercised that path.
+
+The fork now includes upstream `3f0390e`, including the native legacy rotation
+and portrait EAGL canvas fixes. New `LegacyDisplayBridge.mm` observes successful
+EAGL drawable allocation and schedules coalesced main-thread fitting after
+successful presentation. It measures the actual unique guest drawable inside
+the window. `LegacyDisplay.mm` fits its projected rectangle by changing the
+parent's sublayer transform, preserving the existing native rotation, all local
+guest geometry, and the hierarchy shared by sibling controls. No additional
+quarter-turn is inferred. A legacy SDK disabling rotation adapters no longer
+disables this measured presentation fit.
+
+Automatic presentation detection requires a fullscreen pre-iOS-8 phone-capable
+guest and a unique visible 320x480/480x320 layer backed by successful EAGL
+storage. It does not depend on launch image filenames. Native mode and the
+global compatibility disable still opt out. Multiple visible GL surfaces or
+a renderer resized to native dimensions relinquish this fit. Small legacy
+windows retain their earlier window-placement path to keep their hit region
+aligned. A changed foreign compositor transform yields ownership.
+
+CI now links and executes the actual production compositor and registration /
+scheduling bridge in Simulator. Only emulator peer identity and SDK queries
+are stubbed. Cases include modern parent dimensions, nested renderers, sibling
+corner controls, noncentral anchors, repeated fits, scene resize, existing
+rotation, a hidden bookkeeping controller, and return to native drawable size.
+The device log includes `LC32 display:` eligibility and measured fit details.
+Passing these tests does not establish a successful Spy Mouse device run.
+
 ## Rendering and input path
 
 The ARM32 UIKit shim forwards Objective-C calls through `bridge.mm` using
