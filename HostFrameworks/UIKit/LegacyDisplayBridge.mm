@@ -117,8 +117,11 @@ void layoutDrawables(void) {
         // window-placement path remains responsible; this path fixes a modern
         // scene-sized UIWindow containing a smaller, fixed guest drawable.
         if(!CGRectContainsRect(CGRectInset(bounds, -0.5, -0.5), viewport)) continue;
+        // Keep the ownership record while eligible, including a helper that
+        // yielded to a foreign compositor. Clearing it here would reclaim
+        // that authored transform on the next presented frame.
+        [activeParents addObject:parent];
         if(LC32FitLegacyDisplayLayer(parent, renderer, viewport)) {
-            [activeParents addObject:parent];
             [fittedParents addObject:parent];
             if(!objc_getAssociatedObject(renderer, loggedDrawableKey)) {
                 objc_setAssociatedObject(renderer, loggedDrawableKey, @YES,

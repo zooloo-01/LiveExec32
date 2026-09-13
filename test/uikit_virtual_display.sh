@@ -41,7 +41,8 @@ xcrun --sdk iphonesimulator clang -target "$arch-apple-ios15.0-simulator" \
     -isysroot "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
     -fobjc-arc -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -framework UIKit -framework QuartzCore -framework Foundation -framework CoreGraphics \
-    "$repo/test/uikit_virtual_display.m" -o "$app/DisplayTest"
+    "$repo/test/uikit_virtual_display.m" "$repo/test/uikit_legacy_display.mm" \
+    "$repo/HostFrameworks/UIKit/LegacyDisplay.mm" -lc++ -o "$app/DisplayTest"
 codesign --force --sign - "$app"
 if [ "$build_only" -eq 1 ]; then exit 0; fi
 xcrun simctl install "$device" "$app"
@@ -52,4 +53,5 @@ perl -e 'alarm 45; exec @ARGV; die "exec: $!\n"' \
     xcrun simctl launch --console "$device" "$identifier" > "$work/result.log" 2>&1
 cat "$work/result.log"
 grep -q 'virtual display UIKit: PASS' "$work/result.log"
+grep -q 'legacy display production UIKit: PASS' "$work/result.log"
 ! grep -q 'FAIL' "$work/result.log"

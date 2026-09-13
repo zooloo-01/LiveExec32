@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 static unsigned failures;
+extern int LC32RunLegacyDisplayTests(void);
 static void check(BOOL ok, const char *name) {
     if(!ok) { fprintf(stderr, "virtual display: FAIL %s\n", name); ++failures; }
 }
@@ -66,6 +67,7 @@ static void checkCanvas(CGSize viewport, CGSize logical, CGFloat angle) {
 - (BOOL)application:(UIApplication *)app didFinishLaunchingWithOptions:(NSDictionary *)options {
     (void)app; (void)options;
     dispatch_async(dispatch_get_main_queue(), ^{
+        failures += LC32RunLegacyDisplayTests();
         checkCanvas(CGSizeMake(874, 402), CGSizeMake(480, 320), 0);
         checkCanvas(CGSizeMake(402, 874), CGSizeMake(320, 480), 0);
         checkCanvas(CGSizeMake(874, 402), CGSizeMake(320, 480), M_PI_2);

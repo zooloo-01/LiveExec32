@@ -187,7 +187,7 @@ static void checkScenario(CGRect bounds, CGPoint anchor, CGFloat rotation,
 #endif
 }
 
-int LC32RunLegacyDisplayTests(void) {
+extern "C" int LC32RunLegacyDisplayTests(void) {
     failures = 0;
     checkScenario(CGRectMake(0, 0, 402, 874), CGPointMake(0.5, 0.5), 0, NO);
     checkScenario(CGRectMake(0, 0, 874, 402), CGPointMake(0.5, 0.5), M_PI_2, NO);
