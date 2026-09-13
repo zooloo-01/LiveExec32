@@ -1,5 +1,5 @@
 LC32_HOST_TEST_GOALS := check-guest-bootstrap check-memory-hash \
-  check-coremedia-time-values-host check-debug-logging \
+  check-coremedia-time-values-host check-debug-logging check-objc-trace check-build-info \
   check-display-geometry check-display-policy
 LC32_HOST_ONLY_BUILD := $(if $(strip $(MAKECMDGOALS)),\
   $(if $(strip $(filter-out $(LC32_HOST_TEST_GOALS),$(MAKECMDGOALS))),,1),)
@@ -30,9 +30,13 @@ COREMEDIA_TIME_VALUES_HOST_TEST := \
   $(HOST_TEST_OUTPUT_DIR)/coremedia-time-values-host
 DEBUG_LOGGING_HOST_TESTS := $(addprefix $(HOST_TEST_OUTPUT_DIR)/debug-logging-,\
   default disabled enabled)
+OBJC_TRACE_HOST_TESTS := $(addprefix $(HOST_TEST_OUTPUT_DIR)/objc-trace-,\
+  default disabled enabled)
+BUILD_INFO_LOGGING_HOST_TESTS := $(addprefix $(HOST_TEST_OUTPUT_DIR)/build-info-logging-,\
+  present missing)
 
 .PHONY: check-guest-bootstrap check-memory-hash \
-  check-coremedia-time-values-host check-debug-logging
+  check-coremedia-time-values-host check-debug-logging check-objc-trace check-build-info
 check-guest-bootstrap: $(GUEST_BOOTSTRAP_HOST_TEST)
 	"$(GUEST_BOOTSTRAP_HOST_TEST)"
 
@@ -47,6 +51,28 @@ check-debug-logging: $(DEBUG_LOGGING_HOST_TESTS)
 	"$(HOST_TEST_OUTPUT_DIR)/debug-logging-disabled"
 	"$(HOST_TEST_OUTPUT_DIR)/debug-logging-enabled"
 
+check-objc-trace: $(OBJC_TRACE_HOST_TESTS)
+	"$(HOST_TEST_OUTPUT_DIR)/objc-trace-default"
+	"$(HOST_TEST_OUTPUT_DIR)/objc-trace-disabled"
+	"$(HOST_TEST_OUTPUT_DIR)/objc-trace-enabled"
+
+check-build-info: $(BUILD_INFO_LOGGING_HOST_TESTS)
+	python3 build_info.py
+	"$(HOST_TEST_OUTPUT_DIR)/build-info-logging-present"
+	"$(HOST_TEST_OUTPUT_DIR)/build-info-logging-missing"
+
+$(HOST_TEST_OUTPUT_DIR)/build-info-logging-present: BUILD_INFO_LOGGING_TEST_FLAGS := \
+  -DLC32_TEST_MG_PRESENT=1
+$(HOST_TEST_OUTPUT_DIR)/build-info-logging-missing: BUILD_INFO_LOGGING_TEST_FLAGS := \
+  -DLC32_TEST_MG_PRESENT=0 -Wl,-U,_LC32TestMGCopyAnswer
+
+$(BUILD_INFO_LOGGING_HOST_TESTS): build_info_logging.m ../HostFrameworks/LC32/log.m Makefile
+	@mkdir -p "$(HOST_TEST_OUTPUT_DIR)"
+	$(HOST_CC) -fmodules -fno-objc-arc -fblocks -Wall -Wextra -Werror \
+		-fmodules-cache-path="$(abspath ../.theos/module-cache)" \
+		-Wno-deprecated-declarations $(BUILD_INFO_LOGGING_TEST_FLAGS) \
+		build_info_logging.m -framework Foundation -o "$@"
+
 $(HOST_TEST_OUTPUT_DIR)/debug-logging-default: DEBUG_LOGGING_TEST_FLAGS := \
   -ULC32_DEBUG_LOGS -DLC32_TEST_EXPECT_ENABLED=0
 $(HOST_TEST_OUTPUT_DIR)/debug-logging-disabled: DEBUG_LOGGING_TEST_FLAGS := \
@@ -58,6 +84,18 @@ $(DEBUG_LOGGING_HOST_TESTS): debug_logging.c ../include/LC32DebugLog.h
 	@mkdir -p "$(HOST_TEST_OUTPUT_DIR)"
 	$(HOST_CC) $(HOST_CFLAGS) $(DEBUG_LOGGING_TEST_FLAGS) \
 		-I"$(abspath ../include)" debug_logging.c -o "$@"
+
+$(HOST_TEST_OUTPUT_DIR)/objc-trace-default: OBJC_TRACE_TEST_FLAGS := \
+  -ULC32_OBJC_TRACE -DLC32_TEST_EXPECT_ENABLED=0
+$(HOST_TEST_OUTPUT_DIR)/objc-trace-disabled: OBJC_TRACE_TEST_FLAGS := \
+  -ULC32_OBJC_TRACE -DLC32_OBJC_TRACE=0 -DLC32_TEST_EXPECT_ENABLED=0
+$(HOST_TEST_OUTPUT_DIR)/objc-trace-enabled: OBJC_TRACE_TEST_FLAGS := \
+  -ULC32_OBJC_TRACE -DLC32_OBJC_TRACE=1 -DLC32_TEST_EXPECT_ENABLED=1
+
+$(OBJC_TRACE_HOST_TESTS): objc_trace.c ../include/LC32ObjCTrace.h
+	@mkdir -p "$(HOST_TEST_OUTPUT_DIR)"
+	$(HOST_CC) $(HOST_CFLAGS) -O0 $(OBJC_TRACE_TEST_FLAGS) \
+		-I"$(abspath ../include)" objc_trace.c -o "$@"
 
 $(GUEST_BOOTSTRAP_HOST_TEST): guest_bootstrap_host.cpp \
   ../HostFrameworks/LC32/guest_bootstrap.cpp \
@@ -168,6 +206,7 @@ $(eval $(call lc32_test,lc32-vm-purgable,vm_purgable.c,))
 $(eval $(call lc32_guest_test,lc32-audio-converter,audio_converter.c,AudioToolbox CoreFoundation LC32))
 $(eval $(call lc32_guest_test,lc32-audio-file-create-packets,audio_file_create_packets.c,AudioToolbox CoreFoundation LC32))
 $(eval $(call lc32_guest_test,lc32-audio-file-smoke,audio_file_smoke.c,AudioToolbox CoreFoundation LC32))
+$(eval $(call lc32_guest_test,lc32-ext-audio-file-wrap,ext_audio_file_wrap.c,AudioToolbox CoreFoundation LC32))
 $(eval $(call lc32_guest_test,lc32-audio-queue-input,audio_queue_input.c,AudioToolbox CoreFoundation LC32))
 $(eval $(call lc32_guest_test,lc32-audio-queue-output,audio_queue_output.c,AudioToolbox CoreFoundation LC32))
 $(eval $(call lc32_guest_test,lc32-audio-session,audio_session.c,AudioToolbox CoreFoundation LC32))
@@ -183,6 +222,7 @@ $(eval $(call lc32_guest_test,lc32-cfarray-callbacks,cfarray_callbacks.m,Foundat
 $(eval $(call lc32_guest_test,lc32-cfdictionary-callbacks,cfdictionary_callbacks.m,Foundation CoreFoundation LC32))
 $(eval $(call lc32_guest_test,lc32-cfset-callbacks,cfset_callbacks.m,Foundation CoreFoundation LC32))
 $(eval $(call lc32_guest_test,lc32-cfnetwork-http,cfnetwork_http.m,CFNetwork CoreFoundation Foundation LC32))
+$(eval $(call lc32_guest_test,lc32-cfnetwork-host-resolution,cfnetwork_host_resolution.m,CFNetwork CoreFoundation Foundation))
 $(eval $(call lc32_guest_test,lc32-collection-object-buffers,collection_object_buffers.m,Foundation))
 $(eval $(call lc32_guest_test,lc32-class-cluster-reuse,class_cluster_reuse.m,Foundation CoreFoundation LC32))
 $(eval $(call lc32_guest_test,lc32-guest-input-stream,guest_input_stream.m,Foundation LC32))
@@ -215,16 +255,21 @@ $(eval $(call lc32_guest_test,lc32-data-bytes,data_bytes.m,Foundation))
 $(eval $(call lc32_guest_test,lc32-fast-enumeration,fast_enumeration.m,Foundation))
 $(eval $(call lc32_guest_test,lc32-filesystem-capacity,filesystem_capacity.m,Foundation))
 $(eval $(call lc32_guest_test,lc32-gamecontroller-snapshot,gamecontroller_snapshot.m,GameController Foundation CoreFoundation))
+$(eval $(call lc32_guest_test,lc32-gamekit-achievement-properties,gamekit_achievement_properties.m,GameKit Foundation LC32))
 $(eval $(call lc32_test,lc32-foundation-null-utf8,foundation_null_utf8.m,Foundation))
+$(eval $(call lc32_guest_test,lc32-foundation-constants,foundation_constants.m,Foundation CoreFoundation))
 $(eval $(call lc32_guest_test,lc32-foundation-zone,foundation_zone.m,Foundation))
 $(eval $(call lc32_guest_test,lc32-guest-proxy-lifetime,guest_proxy_lifetime.m,Foundation LC32))
 $(eval $(call lc32_guest_test,lc32-kvo-bridge,kvo_bridge.m,Foundation))
+$(eval $(call lc32_guest_test,lc32-imageio-roundtrip,imageio_roundtrip.m,ImageIO CoreGraphics CoreFoundation Foundation))
+$(eval $(call lc32_guest_test,lc32-locale-constants,locale_constants.m,Foundation CoreFoundation))
 $(eval $(call lc32_guest_test,lc32-mobilecoreservices-uti,mobilecoreservices_uti.m,MobileCoreServices CoreFoundation))
 $(eval $(call lc32_guest_test,lc32-mediaplayer-legacy,mediaplayer_legacy.m,MediaPlayer CFNetwork Foundation CoreFoundation LC32))
 $(eval $(call lc32_guest_test,lc32-nsrange-bridge,nsrange_bridge.m,Foundation LC32))
 $(eval $(call lc32_guest_test,lc32-nsvalue-bytes,nsvalue_bytes.m,Foundation))
 $(eval $(call lc32_guest_test,lc32-nullable-guest-cstring,nullable_guest_cstring.c,LC32))
 $(eval $(call lc32_guest_test,lc32-native-proxy-release,native_proxy_release.m,Foundation LC32))
+$(eval $(call lc32_guest_test,lc32-object-out-parameters,object_out_parameters.m,Foundation))
 $(eval $(call lc32_guest_test,lc32-owned-create-copy,owned_create_copy.m,CoreFoundation))
 $(eval $(call lc32_guest_test,lc32-ownership-publication-race,ownership_publication_race.m ownership_publication_race_weak.m,Foundation LC32))
 $(eval $(call lc32_guest_test,lc32-pointer-out-params,pointer_out_params.m,Foundation LC32))
@@ -263,6 +308,8 @@ $(eval $(call lc32_guest_test,lc32-uikit-image-context,uikit_image_context.m,Fou
 $(eval $(call lc32_guest_test,lc32-uikit-legacy-device,uikit_legacy_device.m,Foundation UIKit LC32))
 $(eval $(call lc32_guest_test,lc32-uikit-legacy-overlay,uikit_legacy_overlay.m,Foundation UIKit QuartzCore CoreGraphics LC32))
 $(eval $(call lc32_guest_test,lc32-uikit-legacy-root-geometry,uikit_legacy_root_geometry.m,Foundation UIKit QuartzCore CoreGraphics LC32))
+$(eval $(call lc32_guest_test,lc32-uikit-legacy-phone-canvas,uikit_legacy_phone_canvas.m,Foundation UIKit QuartzCore CoreGraphics LC32))
+$(eval $(call lc32_guest_test,lc32-uikit-legacy-rotation-duration,uikit_legacy_rotation_duration.m,Foundation UIKit LC32))
 $(eval $(call lc32_guest_test,lc32-uikit-legacy-nested-renderer,uikit_legacy_nested_renderer.m,Foundation UIKit QuartzCore CoreGraphics LC32))
 $(eval $(call lc32_guest_test,lc32-uikit-legacy-direct-renderer,uikit_legacy_direct_renderer.m,Foundation UIKit QuartzCore CoreGraphics LC32))
 $(eval $(call lc32_guest_test,lc32-uikit-orientation-startup,uikit_orientation_startup.m,Foundation UIKit LC32))
@@ -304,6 +351,15 @@ lc32-corefoundation-url-common_CFLAGS := -fno-objc-arc
 lc32-corefoundation-write-stream_CFLAGS := -fno-objc-arc
 lc32-coretext-bridge_CFLAGS := -fno-objc-arc
 lc32-foundation-null-utf8_CFLAGS := -fno-objc-arc
+lc32-ext-audio-file-wrap_CFLAGS := -Wall -Wextra -Werror
+lc32-cfnetwork-host-resolution_CFLAGS := -fno-objc-arc -Wall -Wextra -Werror -Wno-deprecated-declarations
+lc32-foundation-constants_CFLAGS := -fno-objc-arc -Wall -Wextra -Werror
+lc32-locale-constants_CFLAGS := -fno-objc-arc -Wall -Wextra -Werror
+lc32-imageio-roundtrip_CFLAGS := -fno-objc-arc -Wall -Wextra -Werror
+lc32-gamekit-achievement-properties_USE_MODULES := 1
+lc32-gamekit-achievement-properties_CFLAGS := -fno-objc-arc \
+	-I$(abspath ../GuestFrameworks) -I$(abspath ../include)
+lc32-object-out-parameters_CFLAGS := -fno-objc-arc
 lc32-property-list-serialization_CFLAGS := -fno-objc-arc -Wno-deprecated-declarations
 lc32-uikit-legacy-window-root_CFLAGS := -fno-objc-arc -Wall -Wextra -Werror
 # Override Theos' clang target, which otherwise takes precedence over a
@@ -312,6 +368,16 @@ lc32-uikit-legacy-overlay_CFLAGS := -fno-objc-arc -target armv7s-apple-ios7.0
 lc32-uikit-legacy-overlay_LDFLAGS += -target armv7s-apple-ios7.0
 lc32-uikit-legacy-root-geometry_CFLAGS := -fno-objc-arc -target armv7s-apple-ios7.0
 lc32-uikit-legacy-root-geometry_LDFLAGS += -target armv7s-apple-ios7.0
+# Exercise the modern fixed-phone container using an SDK-11 host launcher.
+lc32-uikit-legacy-phone-canvas_USE_MODULES := 1
+lc32-uikit-legacy-phone-canvas_CFLAGS := -fno-objc-arc -target armv7s-apple-ios7.0 \
+	-I$(abspath ../GuestFrameworks) -I$(abspath ../include)
+lc32-uikit-legacy-phone-canvas_LDFLAGS += -target armv7s-apple-ios7.0
+# Run under a launcher with effective SDK < 8 to exercise the native adapter.
+lc32-uikit-legacy-rotation-duration_USE_MODULES := 1
+lc32-uikit-legacy-rotation-duration_CFLAGS := -fno-objc-arc -target armv7s-apple-ios7.0 \
+	-I$(abspath ../GuestFrameworks) -I$(abspath ../include)
+lc32-uikit-legacy-rotation-duration_LDFLAGS += -target armv7s-apple-ios7.0
 lc32-uikit-legacy-nested-renderer_USE_MODULES := 1
 lc32-uikit-legacy-nested-renderer_CFLAGS := -fno-objc-arc -target armv7s-apple-ios7.0 \
 	-I$(abspath ../GuestFrameworks) -I$(abspath ../include)
@@ -422,7 +488,7 @@ SHORT_TESTS := $(patsubst lc32-%,%,$(TOOL_NAME))
 .PHONY: build list frameworks clean-outputs \
   abi audio corefoundation graphics threading uikit \
   check-symbols check-openal check-opengles check-security check-coretext \
-  check-graphics-symbols check-public-constants \
+  check-graphics-symbols check-imageio-symbols check-public-constants \
   check-generated-framework-symbols check-generated-gameplay-symbols \
   check-generated-ui-framework-symbols \
   check-generated-public-symbols check-generated-legacy-public-symbols \
@@ -488,6 +554,9 @@ check-graphics-symbols: lc32-coregraphics-bitmap lc32-quartzcore-transform \
   lc32-uikit-accessibility
 	GUEST_FRAMEWORK_DIR="$(GUEST_FRAMEWORK_DIR)" \
 		./graphics_compat_symbols.sh
+check-imageio-symbols: frameworks
+	LC32_GUEST_SDK="$(ISYSROOT)" ./imageio_symbols.sh \
+		"$(GUEST_FRAMEWORK_DIR)/ImageIO.framework/ImageIO"
 check-public-constants: lc32-mobilecoreservices-uti lc32-cfnetwork-http
 	GUEST_FRAMEWORK_DIR="$(GUEST_FRAMEWORK_DIR)" SDKROOT="$(ISYSROOT)" \
 		./public_guest_constants.sh
@@ -535,7 +604,7 @@ check-corefoundation-low-risk-symbols: lc32-corefoundation-low-risk
 # target serial even when the caller supplied -j.
 .NOTPARALLEL: check-symbols
 check-symbols: frameworks check-openal check-opengles check-security check-coretext \
-	check-graphics-symbols check-public-constants \
+	check-graphics-symbols check-imageio-symbols check-public-constants \
 	check-generated-framework-symbols check-generated-gameplay-symbols \
 	check-generated-ui-framework-symbols check-generated-public-symbols \
 	check-generated-legacy-public-symbols check-generated-nonui-public-symbols \

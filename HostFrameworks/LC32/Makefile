@@ -13,10 +13,15 @@ LC32_DEBUG_LOGS ?= 0
 TARGET_CODESIGN =
 
 include ../../module-cache.mk
+include ../../version.mk
 
 include $(THEOS)/makefiles/common.mk
 
 FRAMEWORK_NAME = LiveExec32Shared
+
+LC32_BUILD_INFO_HEADER := $(THEOS_PROJECT_DIR)/.theos/LC32BuildInfo.h
+# Keep changing Git metadata local to the logging translation unit.
+log.m_CFLAGS = -include "$(LC32_BUILD_INFO_HEADER)"
 
 DYNARMIC_ROOT := $(abspath ../../External/dynarmic)
 DYNARMIC_BUILD_DIR := $(THEOS_PROJECT_DIR)/.theos/obj/dynarmic
@@ -63,11 +68,12 @@ LiveExec32Shared_FILES = \
 	../Foundation/Foundation.mm ../Foundation/NSString.mm \
 	../CoreFoundation/CoreFoundation.mm ../CFNetwork/CFNetwork.mm \
 	../Security/Security.mm ../CoreGraphics/CoreGraphics.mm \
+	../ImageIO/ImageIO.mm \
 	../CoreText/CoreText.mm ../CoreMedia/CoreMedia.mm ../CoreVideo/CoreVideo.mm \
 	../AudioToolbox/AudioToolbox.mm \
 	../OpenAL/OpenAL.mm ../OpenGLES/OpenGLES.mm ../UIKit/UIKit.mm \
-	../UIKit/LegacyAutoLayout.mm ../UIKit/LegacyFonts.mm ../UIKit/LegacyAlerts.mm
-LiveExec32Shared_FILES += ../UIKit/LegacyDisplay.mm ../UIKit/LegacyDisplayBridge.mm
+	../UIKit/LegacyAutoLayout.mm ../UIKit/LegacyFonts.mm ../UIKit/LegacyAlerts.mm \
+	../UIKit/LegacyRotation.mm ../UIKit/LegacyDisplay.mm ../UIKit/LegacyDisplayBridge.mm
 LiveExec32Shared_CFLAGS = \
 	-I. -I$(DYNARMIC_ROOT)/src -I../../include -DDYNARMIC_MASTER \
 	-I../../External/mini-gdbstub/include -DLC32_DEBUG_LOGS=$(LC32_DEBUG_LOGS)
@@ -75,12 +81,13 @@ LiveExec32Shared_CCFLAGS = -std=c++17
 crash_exception.mm_CFLAGS = -fobjc-arc
 ../UIKit/LegacyFonts.mm_CFLAGS = -fobjc-arc
 ../UIKit/LegacyAlerts.mm_CFLAGS = -fobjc-arc
+../UIKit/LegacyRotation.mm_CFLAGS = -fobjc-arc
 LiveExec32Shared_OBJ_FILES = $(DYNARMIC_STATIC_LIBS)
-LiveExec32Shared_LDFLAGS = -L../../External/mini-gdbstub/build
+LiveExec32Shared_LDFLAGS = -L../../External/mini-gdbstub/build -Wl,-weak-lMobileGestalt
 LiveExec32Shared_LIBRARIES = gdbstub
 LiveExec32Shared_FRAMEWORKS = \
 	AudioToolbox CFNetwork CoreFoundation CoreMedia CoreVideo Foundation GameKit IOKit \
-	OpenAL OpenGLES QuartzCore Security UIKit
+	ImageIO OpenAL OpenGLES QuartzCore Security UIKit
 LiveExec32Shared_PUBLIC_HEADERS = LiveExec32Shared.h
 LiveExec32Shared_RESOURCE_DIRS = Resources
 LiveExec32Shared_INSTALL_PATH = @rpath
@@ -88,8 +95,16 @@ LiveExec32Shared_INSTALL = 0
 
 # mini-gdbstub is a static dependency of this framework rather than of the
 # launcher, which also keeps direct framework builds complete.
-before-LiveExec32Shared-all:: lc32-dynarmic-static
+before-LiveExec32Shared-all:: lc32-build-info lc32-dynarmic-static
 	$(MAKE) -C ../../External/mini-gdbstub ARCH=rv32 CC="cc -isysroot $(ISYSROOT) -miphoneos-version-min=15.0"
+
+.PHONY: lc32-build-info
+lc32-build-info:
+	/bin/bash "$(LC32_REPO_ROOT)/Scripts/build-info.sh" \
+		--root "$(LC32_REPO_ROOT)" --output "$(LC32_BUILD_INFO_HEADER)"
+
+after-LiveExec32Shared-all::
+	$(call lc32_stamp_version,$(THEOS_OBJ_DIR)/LiveExec32Shared.framework/Info.plist)
 
 internal-clean::
 	$(MAKE) -C ../../External/mini-gdbstub clean
@@ -103,6 +118,7 @@ include $(THEOS_MAKE_PATH)/framework.mk
 
 # The nested CMake build uses a fixed worker count. Its build command drops the
 # parent Theos jobserver instead of advertising it and then overriding it.
+# Match the framework's iOS 15 minimum and keep libc++ availability enabled.
 .PHONY: lc32-dynarmic-static
 lc32-dynarmic-static:
 	@test -f "$(DYNARMIC_ROOT)/CMakeLists.txt" || { \
@@ -122,7 +138,7 @@ lc32-dynarmic-static:
 		-DCMAKE_SYSTEM_PROCESSOR=aarch64 \
 		-DCMAKE_OSX_SYSROOT="$(ISYSROOT)" \
 		-DCMAKE_OSX_ARCHITECTURES=arm64 \
-		-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+		-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
 		-DCMAKE_C_FLAGS="-arch arm64"
 	env -u MAKEFLAGS cmake --build "$(DYNARMIC_BUILD_DIR)" \
 		--target dynarmic --parallel 4

@@ -33,8 +33,21 @@ gmake
   Verbose host bridge, loader, memory, syscall, and thread logs are compiled
   out by default. Build with `gmake LC32_DEBUG_LOGS=1` to enable them; rebuild
   with `gmake LC32_DEBUG_LOGS=0` (or plain `gmake`) to disable them again.
-  Errors and actionable warnings remain enabled in both modes, and existing
+  Errors and actionable warnings remain enabled in both modes. Guest
+  Objective-C tracing has its own build flag described below; other
   specialized runtime trace controls are unchanged.
+
+  `Version:` in the root `control` file is the single release-version source
+  (use a numeric version such as `0.0.1`). Builds copy it into
+  `CFBundleShortVersionString` for LiveExec32, LiveExec32Shared, and LC32HelpUI
+  before signing; tracked Info.plist templates are not rewritten. Theos can
+  still append package-only suffixes via `PACKAGE_BUILDNAME` or `PACKAGE_VERSION`.
+  `CFBundleVersion` remains each bundle's separate build number.
+  Startup logs include that release version, the 7-character Git commit
+  (with `-dirty` for tracked local changes), branch, device model, and OS.
+  Detached CI checkouts use `GITHUB_HEAD_REF`/`GITHUB_REF_NAME` for the branch;
+  source archives without Git metadata use `unknown` for the commit.
+  Run `gmake -C test check-build-info` for the metadata/logging regressions.
 
   The jailbreak injector normally floors the arm64 shim's SDK at iOS 11.
   To experiment with the ARM32 app's original SDK instead, build the deb
@@ -56,10 +69,15 @@ gmake
   available with `sh test/uikit_legacy_sdk_layout.sh --device UDID --baseline`;
   it tests actual SDK 0, 7, 8, 10.3, and 11 Mach-O variants, needs an already
   booted Simulator, and installs/removes only its own temporary test apps.
-  Processes actually linked before iOS 8 use UIKit's native legacy rotation
-  and geometry instead of LiveExec32's adapters, avoiding a duplicate turn.
-  This checks the host process SDK, so modern LiveContainer hosts retain
-  the adapters even for old guests. To compare native UIKit geometry on
+  Processes with an effective SDK before iOS 8 use UIKit's native legacy
+  rotation and geometry instead of LiveExec32's adapters, avoiding a duplicate
+  turn. This follows dyld's process-SDK query, including LiveContainer's SDK
+  override installed before LiveExec32 loads. Thus an unclamped old SDK in
+  LiveContainer disables these adapters, while existing SDK-11-clamped
+  executables or LiveContainer overrides retain them. The native test also
+  includes policy-only cases with an SDK-11 executable and test-provided
+  effective SDKs; those isolate this selection without spoofing UIKit itself.
+  To compare native UIKit geometry on
   newer hosts, launch with `LC32_DISABLE_UIKIT_COMPATIBILITY=1` in the host
   process environment. This disables the host and guest canvas, orientation,
   and synthetic-root adaptations, but retains the low-SDK Auto Layout fixes,
@@ -91,6 +109,13 @@ gmake -C GuestMakefile
   frameworks also share the SDK's MRC/ARC Clang module contexts, keeping a
   cold module cache compact. Set `LC32_SHARE_GUEST_MODULE_CACHE=0` only when
   diagnosing an isolated Clang module-cache issue.
+
+  The generator reports methods disabled by unsupported type encodings,
+  separately from intentionally filtered/manual methods. Run
+  `Generator/GenerateShimAPI/test-object-out-pointers.sh` to check object
+  output marshalling and the captured-template disabled-method baseline.
+  Build the corresponding ARM32 runtime regression with
+  `gmake -C test object-out-parameters`.
 
   The guest build downloads the third-party iOS 10.3 SDK archive to
   `tmp/iPhoneOS10.3.sdk.tar.gz`, verifies its pinned SHA-256 checksum, and
@@ -142,11 +167,19 @@ LC32_GUEST_ENV_NSUnbufferedIO=YES \
   .theos/obj/LiveExec32.app/LiveExec32 /var/mobile/ramdisk32/usr/bin/fdisk
 ```
 
-`HOME`, `LC32_OBJC_TRACE`, `NATIVE_GUEST_THREADS`, and
-`DYLD_SHARED_REGION` remain launcher-owned and cannot be overridden through
+`HOME`, `NATIVE_GUEST_THREADS`, and `DYLD_SHARED_REGION` remain
+launcher-owned and cannot be overridden through
 this mechanism. `DYLD_PRINT_*` diagnostics are disabled by default, but can
 be enabled explicitly, for example with
 `LC32_GUEST_ENV_DYLD_PRINT_SEGMENTS=1`.
+
+Generated Objective-C send tracing is a guest build-time option, disabled
+by default. Enable it with `gmake -C GuestMakefile LC32_OBJC_TRACE=1`;
+rebuild with `LC32_OBJC_TRACE=0` to disable it. Runtime environment variables
+do not configure this tracing, including an explicitly forwarded
+`LC32_GUEST_ENV_LC32_OBJC_TRACE` value.
+Repack the guest root filesystem and rebuild the app to deploy the changed
+guest frameworks.
 
 ## Design
 ### Legacy virtual display
