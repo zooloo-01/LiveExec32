@@ -67,6 +67,7 @@ LiveExec32Shared_FILES = \
 	../AudioToolbox/AudioToolbox.mm \
 	../OpenAL/OpenAL.mm ../OpenGLES/OpenGLES.mm ../UIKit/UIKit.mm \
 	../UIKit/LegacyAutoLayout.mm ../UIKit/LegacyFonts.mm ../UIKit/LegacyAlerts.mm
+LiveExec32Shared_FILES += ../UIKit/LegacyDisplay.mm ../UIKit/LegacyDisplayBridge.mm
 LiveExec32Shared_CFLAGS = \
 	-I. -I$(DYNARMIC_ROOT)/src -I../../include -DDYNARMIC_MASTER \
 	-I../../External/mini-gdbstub/include -DLC32_DEBUG_LOGS=$(LC32_DEBUG_LOGS)

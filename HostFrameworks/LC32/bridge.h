@@ -115,6 +115,8 @@ BOOL host_hook_getClass(const char *name, Class *outClass);
 u32 LC32UIKitLegacyCompatibilityEnabled(void);
 // Normalize only guest legacy CAEAGLLayer density before allocating storage.
 void LC32UIKitPrepareLegacyDrawable(id drawable);
+void LC32UIKitDidAllocateLegacyDrawable(id drawable);
+void LC32UIKitScheduleLegacyDisplayLayout(void);
 // Lets framework bridges add native compatibility entry points after all
 // guest methods have been mirrored but before the class is registered.
 void LC32UIKitPrepareGuestClass(Class cls);

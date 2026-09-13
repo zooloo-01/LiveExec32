@@ -31,6 +31,7 @@
 @interface EAGLContext (LC32EAGLCompatibility)
 - (BOOL)lc32_renderbufferStorage:(NSUInteger)target
                     fromDrawable:(id<EAGLDrawable>)drawable;
+- (BOOL)lc32_presentRenderbuffer:(NSUInteger)target;
 @end
 
 @interface LC32EAGLContextStateLifetime : NSObject {
@@ -2212,6 +2213,15 @@ size_t VertexAttribElementCount(GLenum pname) {
     if(storage && normalizedStorage) {
         method_exchangeImplementations(storage, normalizedStorage);
     }
+    Method present = class_getInstanceMethod(
+        contextClass, @selector(presentRenderbuffer:));
+    Method scheduledPresent = class_getInstanceMethod(
+        contextClass, @selector(lc32_presentRenderbuffer:));
+    if(present && scheduledPresent &&
+            strcmp(method_getTypeEncoding(present),
+                   method_getTypeEncoding(scheduledPresent)) == 0) {
+        method_exchangeImplementations(present, scheduledPresent);
+    }
 }
 
 - (BOOL)lc32_renderbufferStorage:(NSUInteger)target
@@ -2289,6 +2299,24 @@ size_t VertexAttribElementCount(GLenum pname) {
         [fallback release];
         result = [self lc32_renderbufferStorage:target
                                     fromDrawable:drawable];
+    }
+    if(result && drawableLayer) {
+        /* Register only successfully allocated layer-backed drawables. UIKit
+         * owns guest/canvas eligibility and defers hierarchy work to its main
+         * thread, because allocation may occur on a renderer thread. */
+        LC32UIKitDidAllocateLegacyDrawable(drawableLayer);
+    }
+    return result;
+}
+
+- (BOOL)lc32_presentRenderbuffer:(NSUInteger)target {
+    const BOOL result = [self lc32_presentRenderbuffer:target];
+    if(result) {
+        /* A legacy engine can allocate before its window/scene is attached.
+         * Successful presentation gives the native display scheduler another
+         * opportunity to fit registered canvases after layout has settled.
+         * This does not alter GL state or the presentation result. */
+        LC32UIKitScheduleLegacyDisplayLayout();
     }
     return result;
 }

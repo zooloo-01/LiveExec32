@@ -326,4 +326,19 @@ static inline BOOL LC32BundleMayRetainLegacyLandscapePhoneCanvas(
         LC32BundleDeclaresStableLandscapeSide(bundle);
 }
 
+/* Presentation-time detection has actual drawable evidence. Unlike the
+ * launch classifier, it need not guess from launch-art filenames or one
+ * declared landscape side. It still excludes native mode, iPad-only apps,
+ * modern SDKs, and ordinary embedded GL widgets. */
+static inline BOOL LC32BundleMayUseLegacyPhoneDrawable(
+        NSBundle *bundle, uint32_t sdkVersion) {
+    if(LC32BundleDisplayModeIs(bundle, @"native")) return NO;
+    if(LC32BundleDisplayModeIs(bundle, @"legacy")) return YES;
+    const LC32SupportedDeviceFamilies families =
+        LC32BundleSupportedDeviceFamilies(bundle);
+    return sdkVersion < 0x00080000 && families.supportsPhone &&
+        !LC32BundleNeedsLegacyIPadCanvas(bundle, sdkVersion) &&
+        [[[bundle infoDictionary] objectForKey:@"UIStatusBarHidden"] boolValue];
+}
+
 #endif
